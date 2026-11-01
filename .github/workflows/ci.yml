@@ -1,0 +1,53 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go vet ./...
+      - run: go test -race ./...
+      - name: Dockerfile uses the Go version of go.mod
+        run: |
+          want=$(awk '$1 == "go" { print $2 }' go.mod)
+          got=$(sed -n 's/^ARG GO_VERSION=//p' Dockerfile)
+          [ "$got" = "$want" ] || { echo "::error file=Dockerfile::ARG GO_VERSION=$got, go.mod says $want"; exit 1; }
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: pingtxt-telemetry:ci
+      - name: Container starts and is healthy
+        run: |
+          docker run -d --name telemetry -p 8080:8080 -e TELEMETRY_STATS_TOKEN="$(openssl rand -base64 32)" pingtxt-telemetry:ci
+          for i in $(seq 1 30); do
+            curl -fsS localhost:8080/healthz && break
+            [ "$i" = 30 ] && { docker logs telemetry; exit 1; }
+            sleep 1
+          done
+      - name: Saves a report to the volume
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:8080/v1/report \
+            -H 'Content-Type: application/json' \
+            -d '{"id":"AAAAAAAAAAAAAAAAAAAAAAAAAA","version":"v0.0.0","monitors":1,"agents":1}')
+          [ "$code" = 204 ] || { echo "report: $code"; docker logs telemetry; exit 1; }
