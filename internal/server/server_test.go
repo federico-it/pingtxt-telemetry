@@ -183,3 +183,21 @@ func TestPages(t *testing.T) {
 		}
 	}
 }
+
+func TestClientIPHeader(t *testing.T) {
+	s := &Server{cfg: Config{TrustProxy: true, ClientIPHeader: "CF-Connecting-IP"}}
+	r := httptest.NewRequest("POST", "/v1/report", nil)
+	r.RemoteAddr = "10.0.0.1:1234"
+	r.Header.Set("X-Forwarded-For", "198.51.100.7, 172.70.1.1")
+	if ip := s.clientIP(r); ip != "172.70.1.1" {
+		t.Fatal("no header:", ip)
+	}
+	r.Header.Set("CF-Connecting-IP", "junk")
+	if ip := s.clientIP(r); ip != "172.70.1.1" {
+		t.Fatal("bad header:", ip)
+	}
+	r.Header.Set("CF-Connecting-IP", "198.51.100.7")
+	if ip := s.clientIP(r); ip != "198.51.100.7" {
+		t.Fatal(ip)
+	}
+}

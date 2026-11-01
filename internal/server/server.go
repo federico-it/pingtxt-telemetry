@@ -24,6 +24,9 @@ type Config struct {
 	Window time.Duration
 	// TrustProxy reads the client IP from X-Forwarded-For (for the rate limit).
 	TrustProxy bool
+	// ClientIPHeader names a header that holds the client IP, set by a CDN
+	// in front (CF-Connecting-IP for Cloudflare). Empty = not used.
+	ClientIPHeader string
 	// IPRate is how many reports one IP may send per minute.
 	IPRate int
 }
@@ -207,7 +210,14 @@ func (s *Server) Tick(ctx context.Context, keep time.Duration) error {
 	return nil
 }
 
+// clientIP is the address the rate limit counts. Behind a CDN the last
+// X-Forwarded-For entry is the CDN's, so ClientIPHeader comes first.
 func (s *Server) clientIP(r *http.Request) string {
+	if h := s.cfg.ClientIPHeader; h != "" {
+		if ip := strings.TrimSpace(r.Header.Get(h)); net.ParseIP(ip) != nil {
+			return ip
+		}
+	}
 	if s.cfg.TrustProxy {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 			// The proxy appends the address it saw: take the last one.

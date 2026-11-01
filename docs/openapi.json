@@ -1,0 +1,254 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "pingtxt usage stats",
+    "version": "1.0.0",
+    "description": "Routes of pingtxt-telemetry. Hand-written: keep it in sync with internal/server/server.go (TestOpenAPIRoutes checks it). Limits match the server checks, never stricter. Unknown fields are allowed: a newer hub may send more.",
+    "license": {
+      "name": "AGPL-3.0",
+      "url": "https://www.gnu.org/licenses/agpl-3.0.html"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://telemetry.pingtxt.com"
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "operationId": "page",
+        "summary": "Public page with the numbers",
+        "responses": {
+          "200": {
+            "description": "HTML page",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "operationId": "health",
+        "summary": "Health check",
+        "responses": {
+          "200": {
+            "description": "Database answers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database does not answer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/report": {
+      "post": {
+        "operationId": "report",
+        "summary": "Hourly report of a hub",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Report"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Saved"
+          },
+          "400": {
+            "description": "Invalid body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (Retry-After)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/stats": {
+      "get": {
+        "operationId": "stats",
+        "summary": "Public totals (cached 1 minute, CORS *)",
+        "responses": {
+          "200": {
+            "description": "Totals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stats"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "Report": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{16,64}$",
+            "description": "Instance id, crypto/rand.Text on the hub"
+          },
+          "version": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 4096,
+            "description": "Any string: the service stores \"unknown\" when it does not look like a version"
+          },
+          "monitors": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000,
+            "nullable": true
+          },
+          "agents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000000,
+            "nullable": true
+          }
+        }
+      },
+      "Live": {
+        "type": "object",
+        "properties": {
+          "instances": {
+            "type": "integer"
+          },
+          "monitors": {
+            "type": "integer"
+          },
+          "agents": {
+            "type": "integer"
+          }
+        }
+      },
+      "Stats": {
+        "type": "object",
+        "properties": {
+          "live": {
+            "$ref": "#/components/schemas/Live"
+          },
+          "window_hours": {
+            "type": "number"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "version": {
+                  "type": "string"
+                },
+                "instances": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "totals": {
+            "type": "object",
+            "properties": {
+              "seen_30d": {
+                "type": "integer"
+              },
+              "new_7d": {
+                "type": "integer"
+              },
+              "ever": {
+                "type": "integer"
+              }
+            }
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "day": {
+                      "type": "string",
+                      "format": "date"
+                    }
+                  }
+                },
+                {
+                  "$ref": "#/components/schemas/Live"
+                }
+              ]
+            }
+          },
+          "at": {
+            "type": "integer",
+            "description": "Unix ms"
+          }
+        }
+      }
+    }
+  }
+}
