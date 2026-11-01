@@ -63,10 +63,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/report", s.report)
 	mux.HandleFunc("GET /v1/stats", s.stats)
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		_, _ = w.Write([]byte("ok"))
-	})
+	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
@@ -74,6 +71,18 @@ func (s *Server) Handler() http.Handler {
 		_, _ = w.Write(indexHTML)
 	})
 	return mux
+}
+
+// health answers 200 with {"status":"ok"} while the database answers,
+// 503 with {"status":"error"} otherwise.
+func (s *Server) health(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if err := s.store.Ping(r.Context()); err != nil {
+		s.log.Error("health", "err", err)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"status": "error", "version": s.version})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "version": s.version})
 }
 
 // Sweep frees the rate limit buckets that are full again.

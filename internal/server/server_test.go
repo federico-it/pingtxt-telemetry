@@ -157,6 +157,21 @@ func TestRateLimit(t *testing.T) {
 	}
 }
 
+func TestHealth(t *testing.T) {
+	s, _ := newServer(t)
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/healthz", nil))
+	if w.Code != 200 || w.Header().Get("Content-Type") != "application/json" || !strings.Contains(w.Body.String(), `"status":"ok"`) {
+		t.Fatalf("health: %d %s %q", w.Code, w.Header().Get("Content-Type"), w.Body.String())
+	}
+	s.store.Close()
+	w = httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/healthz", nil))
+	if w.Code != 503 || !strings.Contains(w.Body.String(), `"status":"error"`) {
+		t.Fatalf("closed db: %d %q", w.Code, w.Body.String())
+	}
+}
+
 func TestPages(t *testing.T) {
 	s, _ := newServer(t)
 	h := s.Handler()

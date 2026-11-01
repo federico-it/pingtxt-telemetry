@@ -61,6 +61,12 @@ func Open(dir string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
+// Ping checks that the database answers.
+func (s *Store) Ping(ctx context.Context) error {
+	var one int
+	return s.db.QueryRowContext(ctx, "SELECT 1").Scan(&one)
+}
+
 // Save keeps r as the latest report of its hub.
 func (s *Store) Save(ctx context.Context, r Report, now time.Time) error {
 	_, err := s.db.ExecContext(ctx, `
