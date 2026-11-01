@@ -36,7 +36,7 @@ A hub is **live** when its last report is newer than `TELEMETRY_LIVE_WINDOW`
 | `POST /v1/report` | a hub's report (JSON above, max 4 KB). `204`, `400` invalid, `429` rate limited |
 | `GET /v1/stats` | public, cached 1 minute, CORS open: live totals, versions of live hubs, hubs seen in 30 days, new in 7 days, 90 days of history |
 | `GET /` | a public page with the numbers |
-| `GET /healthz` | `ok` |
+| `GET /healthz` | `{"status":"ok","version":"…"}`, or `503` with `"status":"error"` when the database does not answer |
 
 ## Run
 
