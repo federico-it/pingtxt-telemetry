@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pingtxt usage stats</title>
+<style>
+:root { --bg:#fafafa; --fg:#18181b; --muted:#71717a; --line:#d4d4d8; --accent:#16a34a; --down:#dc2626; }
+@media (prefers-color-scheme: dark) { :root { --bg:#09090b; --fg:#fafafa; --muted:#a1a1aa; --line:#3f3f46; --accent:#4ade80; --down:#f87171; } }
+* { box-sizing:border-box; }
+[hidden] { display:none !important; }
+body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+main { max-width:860px; margin:0 auto; padding:24px 16px 48px; }
+h1 { font-size:14px; margin:0 0 20px; } h1 span { color:var(--accent); }
+h2 { font-size:12px; font-weight:normal; color:var(--muted); margin:28px 0 8px; border-bottom:1px dashed var(--line); padding-bottom:4px; }
+.tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+.tile { border:1px dashed var(--line); padding:12px; }
+.tile b { display:block; font-size:28px; font-weight:600; }
+.tile small { color:var(--muted); }
+table { width:100%; border-collapse:collapse; }
+td { padding:3px 0; } td:last-child { text-align:right; }
+.bar { height:6px; background:var(--accent); opacity:.7; }
+.muted { color:var(--muted); } .err { color:var(--down); }
+svg { width:100%; height:120px; display:block; }
+@media (max-width:520px) { .tiles { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+<h1><span>&gt;</span> pingtxt usage stats</h1>
+<p id="msg" class="muted">loading…</p>
+<div id="stats" hidden>
+  <div class="tiles">
+    <div class="tile"><small>live hubs</small><b id="instances">-</b></div>
+    <div class="tile"><small>live monitors</small><b id="monitors">-</b></div>
+    <div class="tile"><small>live agents</small><b id="agents">-</b></div>
+  </div>
+  <p class="muted" id="sub"></p>
+  <h2>live hubs, last 90 days (daily peak)</h2>
+  <svg id="chart" preserveAspectRatio="none"></svg>
+  <h2>versions of live hubs</h2>
+  <table id="versions"></table>
+  <p class="muted">Hubs send these numbers only when an admin opts in: a random id, the version, active monitors and connected agents. <a href="https://pingtxt.com/docs/#usage-stats" style="color:inherit">what is sent</a></p>
+</div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id)
+const fmt = (n) => n.toLocaleString("en-US")
+
+function row(label, n, max) {
+  const tr = document.createElement("tr")
+  const a = document.createElement("td"); a.textContent = label; a.style.width = "30%"
+  const b = document.createElement("td"); const bar = document.createElement("div"); bar.className = "bar"; bar.style.width = (max ? (n / max) * 100 : 0) + "%"; b.appendChild(bar)
+  const c = document.createElement("td"); c.textContent = fmt(n); c.style.width = "15%"
+  tr.append(a, b, c); return tr
+}
+
+function chart(history) {
+  const svg = $("chart"); svg.replaceChildren()
+  if (!history.length) return
+  const w = 900, h = 120, max = Math.max(1, ...history.map((d) => d.instances))
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`)
+  const bw = w / Math.max(history.length, 30)
+  history.forEach((d, i) => {
+    const r = document.createElementNS("http://www.w3.org/2000/svg", "rect")
+    const bh = Math.max(1, (d.instances / max) * (h - 4))
+    r.setAttribute("x", i * bw + 1); r.setAttribute("width", Math.max(1, bw - 2))
+    r.setAttribute("y", h - bh); r.setAttribute("height", bh)
+    r.style.fill = "var(--accent)"; r.style.opacity = ".7"
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "title")
+    t.textContent = `${d.day}: ${d.instances} hubs, ${d.monitors} monitors, ${d.agents} agents`
+    r.appendChild(t); svg.appendChild(r)
+  })
+}
+
+async function load() {
+  try {
+    const res = await fetch("/v1/stats")
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) { $("msg").className = "err"; $("msg").textContent = body.error || res.statusText; return }
+    $("msg").textContent = ""
+    $("stats").hidden = false
+    $("instances").textContent = fmt(body.live.instances)
+    $("monitors").textContent = fmt(body.live.monitors)
+    $("agents").textContent = fmt(body.live.agents)
+    $("sub").textContent = `live = reported in the last ${body.window_hours}h · ${fmt(body.totals.seen_30d)} hubs in 30 days · ${fmt(body.totals.new_7d)} new in 7 days · updated ${new Date(body.at).toLocaleTimeString()}`
+    const max = Math.max(1, ...body.versions.map((v) => v.instances))
+    $("versions").replaceChildren(...body.versions.map((v) => row(v.version, v.instances, max)))
+    if (!body.versions.length) $("versions").innerHTML = '<tr><td class="muted">no live hubs yet</td></tr>'
+    chart(body.history)
+  } catch (err) {
+    $("msg").className = "err"; $("msg").textContent = String(err)
+  }
+}
+load()
+setInterval(() => { if (document.visibilityState === "visible") load() }, 60000)
+</script>
+</body>
+</html>

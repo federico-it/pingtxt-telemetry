@@ -1,0 +1,21 @@
+# Example: docker compose up -d
+services:
+  telemetry:
+    image: ghcr.io/federico-it/pingtxt-telemetry:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Behind Traefik/Caddy/nginx (Coolify): read the client IP from
+      # X-Forwarded-For for the per-IP limit.
+      TELEMETRY_TRUST_PROXY: "false"
+    volumes:
+      - telemetry-data:/data
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 128m
+
+volumes:
+  telemetry-data:
