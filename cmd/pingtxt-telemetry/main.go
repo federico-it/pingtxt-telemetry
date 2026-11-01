@@ -82,9 +82,10 @@ func run() error {
 	defer st.Close()
 
 	s := server.New(server.Config{
-		Window:     window,
-		TrustProxy: env("TELEMETRY_TRUST_PROXY", "false") == "true",
-		IPRate:     ipRate,
+		Window:         window,
+		TrustProxy:     env("TELEMETRY_TRUST_PROXY", "false") == "true",
+		ClientIPHeader: env("TELEMETRY_CLIENT_IP_HEADER", ""),
+		IPRate:         ipRate,
 	}, st, log, version)
 
 	addr := env("TELEMETRY_ADDR", ":8080")

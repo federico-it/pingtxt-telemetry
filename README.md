@@ -38,6 +38,9 @@ A hub is **live** when its last report is newer than `TELEMETRY_LIVE_WINDOW`
 | `GET /` | a public page with the numbers |
 | `GET /healthz` | `{"status":"ok","version":"…"}`, or `503` with `"status":"error"` when the database does not answer |
 
+[`docs/openapi.json`](docs/openapi.json) describes these routes (OpenAPI 3.0),
+ready for Cloudflare API Shield schema validation.
+
 ## Run
 
 ```sh
@@ -49,6 +52,7 @@ docker compose up -d
 | `TELEMETRY_DATA` | `/data` | folder of `telemetry.db` (SQLite). Mount a volume here |
 | `TELEMETRY_ADDR` | `:8080` | listen address |
 | `TELEMETRY_TRUST_PROXY` | `false` | `true` behind Traefik/Caddy/nginx: rate limit by `X-Forwarded-For` |
+| `TELEMETRY_CLIENT_IP_HEADER` | | header with the client IP set by a CDN, checked first: `CF-Connecting-IP` behind Cloudflare (there the last `X-Forwarded-For` entry is a Cloudflare address). Only set it when the origin accepts traffic from the CDN alone |
 | `TELEMETRY_LIVE_WINDOW` | `2h` | how recent a report must be to count as live |
 | `TELEMETRY_KEEP_DAYS` | `180` | delete hubs not seen for this many days |
 | `TELEMETRY_IP_RATE` | `30` | reports per IP per minute (0 = no limit) |
@@ -58,7 +62,8 @@ docker compose up -d
 
 New resource from the GitHub repository → build pack **Dockerfile**, port
 `8080`, domain `https://telemetry.pingtxt.com` (the hub's default). Add a
-persistent storage volume on `/data`, and set `TELEMETRY_TRUST_PROXY=true`.
+persistent storage volume on `/data`, and set `TELEMETRY_TRUST_PROXY=true`
+(behind Cloudflare also `TELEMETRY_CLIENT_IP_HEADER=CF-Connecting-IP`).
 The image has no shell or curl: turn the Coolify health check off (the Docker `HEALTHCHECK` runs `/pingtxt-telemetry healthcheck`).
 
 ## Build
