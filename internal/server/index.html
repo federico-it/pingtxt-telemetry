@@ -3,8 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>pingtxt telemetry</title>
+<title>pingtxt usage stats</title>
 <style>
 :root { --bg:#fafafa; --fg:#18181b; --muted:#71717a; --line:#d4d4d8; --accent:#16a34a; --down:#dc2626; }
 @media (prefers-color-scheme: dark) { :root { --bg:#09090b; --fg:#fafafa; --muted:#a1a1aa; --line:#3f3f46; --accent:#4ade80; --down:#f87171; } }
@@ -22,22 +21,14 @@ table { width:100%; border-collapse:collapse; }
 td { padding:3px 0; } td:last-child { text-align:right; }
 .bar { height:6px; background:var(--accent); opacity:.7; }
 .muted { color:var(--muted); } .err { color:var(--down); }
-form { display:flex; gap:8px; flex-wrap:wrap; }
-input { flex:1; min-width:200px; font:inherit; padding:6px 8px; background:transparent; color:var(--fg); border:1px solid var(--line); }
-button { font:inherit; padding:6px 12px; background:var(--fg); color:var(--bg); border:0; cursor:pointer; }
-button.link { background:none; color:var(--muted); padding:0; text-decoration:underline; }
 svg { width:100%; height:120px; display:block; }
 @media (max-width:520px) { .tiles { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
 <main>
-<h1><span>&gt;</span> pingtxt telemetry</h1>
-<form id="login" hidden>
-  <input id="token" type="password" placeholder="stats token" autocomplete="current-password" required>
-  <button>open</button>
-</form>
-<p id="msg" class="muted"></p>
+<h1><span>&gt;</span> pingtxt usage stats</h1>
+<p id="msg" class="muted">loading…</p>
 <div id="stats" hidden>
   <div class="tiles">
     <div class="tile"><small>live hubs</small><b id="instances">-</b></div>
@@ -49,20 +40,11 @@ svg { width:100%; height:120px; display:block; }
   <svg id="chart" preserveAspectRatio="none"></svg>
   <h2>versions of live hubs</h2>
   <table id="versions"></table>
-  <p><button class="link" id="logout">forget token</button></p>
+  <p class="muted">Hubs send these numbers only when an admin opts in: a random id, the version, active monitors and connected agents. <a href="https://pingtxt.com/docs/#usage-stats" style="color:inherit">what is sent</a></p>
 </div>
 </main>
 <script>
 const $ = (id) => document.getElementById(id)
-const KEY = "pingtxt-telemetry-token"
-function getToken() { try { return sessionStorage.getItem(KEY) } catch { return null } }
-function setToken(t) { try { t ? sessionStorage.setItem(KEY, t) : sessionStorage.removeItem(KEY) } catch {} }
-let token = getToken()
-
-$("login").addEventListener("submit", (e) => { e.preventDefault(); token = $("token").value.trim(); setToken(token); load() })
-$("logout").addEventListener("click", () => { token = null; setToken(null); show(false) })
-
-function show(ok) { $("login").hidden = ok; $("stats").hidden = !ok; if (!ok) $("token").focus() }
 const fmt = (n) => n.toLocaleString("en-US")
 
 function row(label, n, max) {
@@ -92,16 +74,12 @@ function chart(history) {
 }
 
 async function load() {
-  if (!token) { show(false); return }
-  $("msg").textContent = ""
   try {
-    const res = await fetch("/v1/stats", { headers: { Authorization: "Bearer " + token } })
+    const res = await fetch("/v1/stats")
     const body = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      if (res.status === 401) { token = null; setToken(null) }
-      show(false); $("msg").className = "err"; $("msg").textContent = body.error || res.statusText; return
-    }
-    show(true)
+    if (!res.ok) { $("msg").className = "err"; $("msg").textContent = body.error || res.statusText; return }
+    $("msg").textContent = ""
+    $("stats").hidden = false
     $("instances").textContent = fmt(body.live.instances)
     $("monitors").textContent = fmt(body.live.monitors)
     $("agents").textContent = fmt(body.live.agents)
@@ -115,7 +93,7 @@ async function load() {
   }
 }
 load()
-setInterval(() => { if (token && document.visibilityState === "visible") load() }, 60000)
+setInterval(() => { if (document.visibilityState === "visible") load() }, 60000)
 </script>
 </body>
 </html>

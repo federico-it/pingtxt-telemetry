@@ -4,7 +4,6 @@ package server
 
 import (
 	"context"
-	"crypto/subtle"
 	_ "embed"
 	"encoding/json"
 	"log/slog"
@@ -12,6 +11,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/federico-it/pingtxt-telemetry/internal/ratelimit"
@@ -20,8 +20,6 @@ import (
 
 // Config are the server settings, read from the environment by main.
 type Config struct {
-	// StatsToken protects the stats API and page. Empty turns them off.
-	StatsToken string
 	// Window is how recent a report must be for a hub to count as live.
 	Window time.Duration
 	// TrustProxy reads the client IP from X-Forwarded-For (for the rate limit).
@@ -37,6 +35,10 @@ type Server struct {
 	version string
 	limit   *ratelimit.Limiter
 	now     func() time.Time
+
+	cacheMu  sync.Mutex
+	cache    *Stats
+	cachedAt time.Time
 }
 
 func New(cfg Config, st *store.Store, log *slog.Logger, version string) *Server {
@@ -133,29 +135,25 @@ type Stats struct {
 	At          int64                `json:"at"`      // unix ms
 }
 
+// stats is public: totals only, nothing about a single hub. The answer is
+// cached for a minute so the page can be shared without loading the database.
 func (s *Server) stats(w http.ResponseWriter, r *http.Request) {
-	if s.cfg.StatsToken == "" {
-		writeErr(w, http.StatusServiceUnavailable, "stats are off: set TELEMETRY_STATS_TOKEN")
-		return
-	}
-	tok, _ := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if subtle.ConstantTimeCompare([]byte(tok), []byte(s.cfg.StatsToken)) != 1 {
-		// Same bucket as reports, so the token cannot be guessed fast.
-		if !s.limit.Allow(s.clientIP(r), 5) {
-			w.Header().Set("Retry-After", "60")
-			writeErr(w, http.StatusTooManyRequests, "too many attempts")
+	s.cacheMu.Lock()
+	if s.cache == nil || s.now().Sub(s.cachedAt) >= time.Minute {
+		st, err := s.Snapshot(r.Context())
+		if err != nil {
+			s.cacheMu.Unlock()
+			s.log.Error("stats", "err", err)
+			writeErr(w, http.StatusInternalServerError, "internal error")
 			return
 		}
-		writeErr(w, http.StatusUnauthorized, "invalid token")
-		return
+		s.cache, s.cachedAt = st, s.now()
 	}
-	st, err := s.Snapshot(r.Context())
-	if err != nil {
-		s.log.Error("stats", "err", err)
-		writeErr(w, http.StatusInternalServerError, "internal error")
-		return
-	}
-	w.Header().Set("Cache-Control", "no-store")
+	st := s.cache
+	s.cacheMu.Unlock()
+	w.Header().Set("Cache-Control", "public, max-age=60")
+	// Other sites (pingtxt.com) may show the numbers.
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	writeJSON(w, http.StatusOK, st)
 }
 

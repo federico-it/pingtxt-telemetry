@@ -14,8 +14,6 @@ import (
 	"github.com/federico-it/pingtxt-telemetry/internal/store"
 )
 
-const token = "test-token-0123456789abcdef"
-
 func newServer(t *testing.T) (*Server, *time.Time) {
 	t.Helper()
 	st, err := store.Open(t.TempDir())
@@ -23,7 +21,7 @@ func newServer(t *testing.T) (*Server, *time.Time) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	s := New(Config{StatsToken: token, Window: 2 * time.Hour, IPRate: 1000}, st, slog.New(slog.NewTextHandler(io.Discard, nil)), "test")
+	s := New(Config{Window: 2 * time.Hour, IPRate: 1000}, st, slog.New(slog.NewTextHandler(io.Discard, nil)), "test")
 	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
 	s.now = func() time.Time { return now }
 	return s, &now
@@ -36,10 +34,13 @@ func post(t *testing.T, h http.Handler, body string) int {
 	return w.Code
 }
 
-func getStats(t *testing.T, h http.Handler, tok string) (int, Stats) {
+func getStats(t *testing.T, s *Server) (int, Stats) {
 	t.Helper()
+	s.cacheMu.Lock()
+	s.cache = nil // tests move the clock: no cached answer
+	s.cacheMu.Unlock()
 	r := httptest.NewRequest("GET", "/v1/stats", nil)
-	r.Header.Set("Authorization", "Bearer "+tok)
+	h := s.Handler()
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	var st Stats
@@ -74,10 +75,7 @@ func TestReportsAndStats(t *testing.T) {
 		}
 	}
 
-	if c, _ := getStats(t, h, "wrong"); c != 401 {
-		t.Fatalf("wrong token: %d", c)
-	}
-	c, st := getStats(t, h, token)
+	c, st := getStats(t, s)
 	if c != 200 || st.Live != (store.Live{Instances: 3, Monitors: 18, Agents: 4}) {
 		t.Fatalf("live: %d %+v", c, st.Live)
 	}
@@ -98,7 +96,7 @@ func TestReportsAndStats(t *testing.T) {
 	if err := s.Tick(context.Background(), 180*24*time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	_, st = getStats(t, h, token)
+	_, st = getStats(t, s)
 	if st.Live != (store.Live{Instances: 1, Monitors: 6, Agents: 1}) {
 		t.Fatalf("live later: %+v", st.Live)
 	}
@@ -111,16 +109,32 @@ func TestReportsAndStats(t *testing.T) {
 	if err := s.Tick(context.Background(), 180*24*time.Hour); err != nil {
 		t.Fatal(err)
 	}
-	if _, st = getStats(t, h, token); st.Totals.Ever != 0 || len(st.History) != 2 {
+	if _, st = getStats(t, s); st.Totals.Ever != 0 || len(st.History) != 2 {
 		t.Fatalf("after prune: %+v", st)
 	}
 }
 
-func TestStatsOffWithoutToken(t *testing.T) {
-	s, _ := newServer(t)
-	s.cfg.StatsToken = ""
-	if c, _ := getStats(t, s.Handler(), ""); c != 503 {
-		t.Fatalf("no token: %d", c)
+func TestStatsCached(t *testing.T) {
+	s, now := newServer(t)
+	h := s.Handler()
+	get := func() Stats {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", "/v1/stats", nil))
+		if w.Header().Get("Access-Control-Allow-Origin") != "*" {
+			t.Fatal("no CORS header")
+		}
+		var st Stats
+		_ = json.NewDecoder(w.Body).Decode(&st)
+		return st
+	}
+	get()
+	post(t, h, `{"id":"AAAAAAAAAAAAAAAAAAAAAAAAAA","version":"v1","monitors":1,"agents":1}`)
+	if st := get(); st.Live.Instances != 0 {
+		t.Fatalf("not cached: %+v", st.Live)
+	}
+	*now = now.Add(time.Minute)
+	if st := get(); st.Live.Instances != 1 {
+		t.Fatalf("stale: %+v", st.Live)
 	}
 }
 

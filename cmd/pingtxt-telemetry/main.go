@@ -54,18 +54,6 @@ func env(k, def string) string {
 	return def
 }
 
-// valueOrFile reads K, or the file named by K_FILE (Docker secrets).
-func valueOrFile(k string) (string, error) {
-	if f := os.Getenv(k + "_FILE"); f != "" {
-		b, err := os.ReadFile(f)
-		if err != nil {
-			return "", fmt.Errorf("%s_FILE: %w", k, err)
-		}
-		return strings.TrimSpace(string(b)), nil
-	}
-	return strings.TrimSpace(os.Getenv(k)), nil
-}
-
 func run() error {
 	var level slog.Level
 	if err := level.UnmarshalText([]byte(env("TELEMETRY_LOG_LEVEL", "info"))); err != nil {
@@ -73,16 +61,6 @@ func run() error {
 	}
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 
-	token, err := valueOrFile("TELEMETRY_STATS_TOKEN")
-	if err != nil {
-		return err
-	}
-	if token != "" && len(token) < 24 {
-		return errors.New("TELEMETRY_STATS_TOKEN must be at least 24 characters; make one with: openssl rand -base64 32")
-	}
-	if token == "" {
-		log.Warn("TELEMETRY_STATS_TOKEN not set: the stats page and API are off")
-	}
 	window, err := time.ParseDuration(env("TELEMETRY_LIVE_WINDOW", "2h"))
 	if err != nil || window < 10*time.Minute {
 		return errors.New("TELEMETRY_LIVE_WINDOW: a duration of at least 10m, like 2h")
@@ -104,7 +82,6 @@ func run() error {
 	defer st.Close()
 
 	s := server.New(server.Config{
-		StatsToken: token,
 		Window:     window,
 		TrustProxy: env("TELEMETRY_TRUST_PROXY", "false") == "true",
 		IPRate:     ipRate,

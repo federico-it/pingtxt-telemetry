@@ -17,6 +17,7 @@ sends only this:
 
 No names, targets, addresses, results or emails. The service does **not** store
 IP addresses: the client IP is used only for an in-memory rate limit.
+Only totals are public: no single hub's report is ever shown.
 `PINGTXT_DISABLE_TELEMETRY=true` on a hub turns the stats off for good.
 
 ## What it keeps
@@ -33,20 +34,18 @@ A hub is **live** when its last report is newer than `TELEMETRY_LIVE_WINDOW`
 | | |
 |---|---|
 | `POST /v1/report` | a hub's report (JSON above, max 4 KB). `204`, `400` invalid, `429` rate limited |
-| `GET /v1/stats` | `Authorization: Bearer <TELEMETRY_STATS_TOKEN>`: live totals, versions of live hubs, hubs seen in 30 days, new in 7 days, 90 days of history |
-| `GET /` | a small page that asks for the token and shows the numbers |
+| `GET /v1/stats` | public, cached 1 minute, CORS open: live totals, versions of live hubs, hubs seen in 30 days, new in 7 days, 90 days of history |
+| `GET /` | a public page with the numbers |
 | `GET /healthz` | `ok` |
 
 ## Run
 
 ```sh
-echo "TELEMETRY_STATS_TOKEN=$(openssl rand -base64 32)" > .env
 docker compose up -d
 ```
 
 | Variable | Default | |
 |---|---|---|
-| `TELEMETRY_STATS_TOKEN` (or `_FILE`) | | token for the stats page and API (24+ characters). Empty turns them off |
 | `TELEMETRY_DATA` | `/data` | folder of `telemetry.db` (SQLite). Mount a volume here |
 | `TELEMETRY_ADDR` | `:8080` | listen address |
 | `TELEMETRY_TRUST_PROXY` | `false` | `true` behind Traefik/Caddy/nginx: rate limit by `X-Forwarded-For` |
@@ -59,9 +58,8 @@ docker compose up -d
 
 New resource from the GitHub repository → build pack **Dockerfile**, port
 `8080`, domain `https://telemetry.pingtxt.com` (the hub's default). Add a
-persistent storage volume on `/data`, and set `TELEMETRY_STATS_TOKEN` and
-`TELEMETRY_TRUST_PROXY=true`. The image has no shell or curl: turn the Coolify
-health check off (the Docker `HEALTHCHECK` runs `/pingtxt-telemetry healthcheck`).
+persistent storage volume on `/data`, and set `TELEMETRY_TRUST_PROXY=true`.
+The image has no shell or curl: turn the Coolify health check off (the Docker `HEALTHCHECK` runs `/pingtxt-telemetry healthcheck`).
 
 ## Build
 

@@ -39,7 +39,7 @@ jobs:
           tags: pingtxt-telemetry:ci
       - name: Container starts and is healthy
         run: |
-          docker run -d --name telemetry -p 8080:8080 -e TELEMETRY_STATS_TOKEN="$(openssl rand -base64 32)" pingtxt-telemetry:ci
+          docker run -d --name telemetry -p 8080:8080 pingtxt-telemetry:ci
           for i in $(seq 1 30); do
             curl -fsS localhost:8080/healthz && break
             [ "$i" = 30 ] && { docker logs telemetry; exit 1; }
@@ -51,3 +51,4 @@ jobs:
             -H 'Content-Type: application/json' \
             -d '{"id":"AAAAAAAAAAAAAAAAAAAAAAAAAA","version":"v0.0.0","monitors":1,"agents":1}')
           [ "$code" = 204 ] || { echo "report: $code"; docker logs telemetry; exit 1; }
+          curl -fsS localhost:8080/v1/stats | grep -q '"instances":1' || { docker logs telemetry; exit 1; }
