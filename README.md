@@ -4,11 +4,11 @@ Anonymous usage stats for [pingtxt](https://github.com/federico-it/pingtxt):
 how many self-hosted hubs are live, and how many monitors and agents they run.
 
 Hubs send nothing until an admin says yes to the one-time question after
-install (or turns it on in settings → usage stats). Then, once an hour, a hub
+install (or turns it on in settings → general → usage stats). Then, once an hour, a hub
 sends only this:
 
 ```json
-{"id": "K7QZ…", "version": "v0.4.0", "monitors": 12, "agents": 3}
+{"id": "K7QZ…", "version": "v0.5.0", "monitors": 12, "agents": 3}
 ```
 
 - `id`: random, made by the hub the first time stats are turned on, never changes.
@@ -19,6 +19,8 @@ No names, targets, addresses, results or emails. The service does **not** store
 IP addresses: the client IP is used only for an in-memory rate limit.
 Only totals are public: no single hub's report is ever shown.
 `PINGTXT_DISABLE_TELEMETRY=true` on a hub turns the stats off for good.
+The hub side is described in the pingtxt docs, under
+[usage stats](https://pingtxt.com/docs/administration/#usage-stats).
 
 ## What it keeps
 
