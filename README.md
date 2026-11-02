@@ -78,6 +78,11 @@ go test ./...
 docker build -t pingtxt-telemetry .
 ```
 
+## Contributing and security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities privately as described in
+[SECURITY.md](SECURITY.md), never in a public issue.
+
 ## License
 
 AGPL-3.0, like pingtxt.
